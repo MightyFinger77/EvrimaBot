@@ -174,20 +174,35 @@ public final class EvrimaRcon implements AutoCloseable {
         return readResponse();
     }
 
-    /** Read until EOF or socket read timeout (idle gap). */
+    /**
+     * Read response in two phases:
+     * 1) wait up to configured timeout for first byte,
+     * 2) once data starts arriving, use a short idle tail timeout so commands return fast.
+     */
     private String readResponse() throws IOException {
         ByteArrayOutputStream buf = new ByteArrayOutputStream();
         byte[] chunk = new byte[8192];
-        while (true) {
-            try {
-                int n = in.read(chunk);
-                if (n == -1) {
+        int originalTimeout = socket.getSoTimeout();
+        int tailTimeoutMs = Math.min(Math.max(80, originalTimeout / 20), 350);
+        boolean gotAnyBytes = false;
+        try {
+            while (true) {
+                try {
+                    int n = in.read(chunk);
+                    if (n == -1) {
+                        break;
+                    }
+                    buf.write(chunk, 0, n);
+                    if (!gotAnyBytes) {
+                        gotAnyBytes = true;
+                        socket.setSoTimeout(tailTimeoutMs);
+                    }
+                } catch (SocketTimeoutException e) {
                     break;
                 }
-                buf.write(chunk, 0, n);
-            } catch (SocketTimeoutException e) {
-                break;
             }
+        } finally {
+            socket.setSoTimeout(originalTimeout);
         }
         return buf.toString(StandardCharsets.UTF_8);
     }

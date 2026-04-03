@@ -95,8 +95,8 @@ Open the generated URL, pick your server, authorize.
 The bot does **not** use Discord’s permission system for RCON—it uses **role IDs** you list in your config file (usually **`configs/config.yml`**):
 
 - `roles.moderator` — `/evrima-mod …`
-- `roles.admin` — `/evrima-admin …` (RCON + `/evrima-admin give` for points)
-- `roles.head_admin` — same as admin for `/evrima-admin`, plus `/evrima-head …` only for this tier
+- `roles.admin` — `/evrima-admin …`, `/evrima-server …` (RCON), and `/evrima-admin give` for points
+- `roles.head_admin` — same as admin for `/evrima-admin` and `/evrima-server`, plus `/evrima-head …` only for this tier
 
 **How to get a role ID:** Discord → Server Settings → Roles → right‑click **the role** → Copy Role ID (Developer Mode on). These are **role** snowflakes, not your personal Discord user ID.
 
@@ -115,7 +115,9 @@ roles:
 
 Enable RCON in your dedicated server config (hosting docs usually mention `Game.ini`: `bRconEnabled=true`, password, port). The bot’s `rcon` section must match **host**, **port**, and **password**.
 
-**Exact RCON command syntax** can vary by game build; see [The Isle game build compatibility](#the-isle-game-build-compatibility). If something fails, compare the strings the bot sends (see `BotListener`) with your host’s RCON reference and adjust.
+**`rcon.timeout_ms`** (default `30000`) is the maximum wait for the **first byte** of a response (connect + auth + server). After data starts, the client uses a **short idle tail** so replies finish quickly instead of sitting until the full timeout on every command. Lower `timeout_ms` if you want hung RCON calls to fail faster; the tail is derived from this value.
+
+**Exact RCON command syntax** can vary by game build; see [The Isle game build compatibility](#the-isle-game-build-compatibility). If something fails, compare the strings the bot sends (see `BotListener` / `EvrimaRcon`) with your host’s RCON reference and adjust.
 
 ---
 
@@ -255,15 +257,23 @@ Order matters for troubleshooting logs.
 5. **Slash commands** — Registers command **roots** on the guild when **`discord.guild_id`** is set and the bot is in that server; otherwise registers **globally** (Discord can take up to about an hour for new global commands to appear everywhere).
 6. **Background tasks** — Starts schedulers you enabled in config (population dashboard embed, channel topics, in-game log tail, adaptive AI density, species population control, scheduled corpse wipes, etc.).
 
-**Tip:** Set `discord.guild_id` to your Discord server’s numeric ID so commands register **on that guild** and usually appear **within seconds** after restart. With `guild_id: 0`, expect a log line like **`Registered N global slash command roots`** (N is the number of top-level slash roots, e.g. `/evrima`, `/evrima-admin`, …); global propagation can be slow—switch to a real guild ID for faster iteration.
+**Tip:** Set `discord.guild_id` to your Discord server’s numeric ID so commands register **on that guild** and usually appear **within seconds** after restart. With `guild_id: 0`, expect a log line like **`Registered N global slash command roots`** (N is the number of top-level slash roots, e.g. `/evrima`, `/evrima-mod`, `/evrima-admin`, `/evrima-server`, `/evrima-head`); global propagation can be slow—switch to a real guild ID for faster iteration.
 
 You should see: **`EvrimaServerBot logged in as …`** (and earlier, **`Config directory: …`** when using the default no-args layout).
+
+### Removing slash commands from Discord (optional)
+
+To delete this bot’s slash **roots** from the Discord application (global + per-guild the bot is in), use **`remove-evrima.ps1`** from this folder. It requires **`-BotToken`** (and optional **`-ApplicationId`**). On Windows you can run **`run-remove-evrima.bat`**, which launches the script and forwards extra arguments (e.g. `-BotToken "…"`).
 
 ---
 
 ## Slash commands reference
 
-Commands are split into **four roots** so you can hide staff trees in **Server Settings → Integrations → [bot] → Manage** (Command Permissions v2). The bot still **checks** role IDs from your config (e.g. **`configs/config.yml`**) at runtime.
+Commands are split into **five roots** so you can hide staff trees in **Server Settings → Integrations → [bot] → Manage** (Command Permissions v2). The bot still **checks** role IDs from your config (e.g. **`configs/config.yml`**) at runtime.
+
+- **`/evrima`**, **`/evrima-mod`**, **`/evrima-admin`**, **`/evrima-server`**, **`/evrima-head`**
+
+Resolving an in-game **name** to SteamID64 uses RCON `playerlist`; the bot **caches** that text for a few seconds so back-to-back admin commands do not each pay a full extra `playerlist` round trip.
 
 ### `/evrima` (everyone)
 
@@ -275,13 +285,14 @@ Commands are split into **four roots** so you can hide staff trees in **Server S
 | **account** | `debug` | Your role IDs vs config (use if admin commands deny you). |
 | **eco** | `balance` | Points balance. |
 | **eco** | `spin` | Once per UTC day; random points (`economy` in config). |
-| **dino** | `park` / `list` / `delete` / `retrieve` | Parking metadata (retrieve = placeholder). |
+| **dino** | `park` / `list` / `delete` / `retrieve` | Parking: RCON snapshot + optional on-disk player file capture/restore (see `dino_park.playerdata_file` in config). |
 | **ecosystem** | `dashboard` | RCON `playerlist` → species counts when the text **includes** species-like tokens; some builds only return **Steam IDs + player names** (no dino column) — then only player totals work, not species %. Optional `fresh` bypasses cache. |
 
 ### `/evrima-mod` (configure visibility + bot checks `moderator` / `admin` / `head_admin`)
 
 | Subcommand | What it does |
 |------------|----------------|
+| `adminhelp` | Short list of staff/admin slash trees (moderator+). |
 | `whois` | Linked Steam + filtered `getplayerdata` via RCON. Use **`user`** (Discord) **or** **`player`** (SteamID64 / in-game name from live `playerlist`), not both. |
 | `timeout` | Discord timeout (minutes). |
 
@@ -326,6 +337,27 @@ Commands are split into **four roots** so you can hide staff trees in **Server S
 
 **Note:** `ai-wipe` does **not** run RCON — it documents the **Evrima RCON** surface. Use **`ai-stop-spawns`** / **`ai-density`** or **`ai-toggle`** for spawn / master-switch behavior.
 
+### `/evrima-server` (configure visibility + bot checks `admin` **or** `head_admin`)
+
+Extra **mapped Evrima RCON** verbs that are not duplicated under `/evrima-admin` (keeps `/evrima-admin` under Discord’s subcommand limits and groups “server settings” in one place). Each subcommand runs the matching RCON line and shows the raw response. There is **no** `custom` / free-text RCON passthrough in this bot.
+
+| Subcommand | What it does |
+|------------|----------------|
+| `serverdetails` | RCON `serverdetails`. |
+| `getplayables` | RCON `getplayables`. |
+| `updateplayables` | RCON `updateplayables` — option **`classes`**: comma-separated internal class names. |
+| `togglemigrations` | RCON `togglemigrations`. |
+| `growth-toggle` | RCON `togglegrowthmultiplier`. |
+| `growth-set` | RCON `setgrowthmultiplier` — option **`value`**. |
+| `netdistance-toggle` | RCON `togglenetupdatedistancechecks`. |
+| `pause` | RCON `pause`. |
+| `queue-status` | RCON `getqueuestatus`. |
+| `globalchat-toggle` | RCON `toggleglobalchat`. |
+| `humans-toggle` | RCON `togglehumans`. |
+| `whitelist-toggle` | RCON `togglewhitelist`. |
+| `whitelist-add` | RCON `addwhitelist` — option **`steam_id`** (SteamID64). |
+| `whitelist-remove` | RCON `removewhitelist` — option **`steam_id`**. |
+
 ### `/evrima-head` (configure visibility + bot checks `head_admin` only)
 
 | Subcommand | What it does |
@@ -341,12 +373,12 @@ Commands are split into **four roots** so you can hide staff trees in **Server S
 | **Bot offline / login fails** | Token correct? `DISCORD_TOKEN` vs `configs/config.yml` (or your chosen path). Bot not disabled in portal. |
 | **Slash commands missing** | If `guild_id` is `0`, wait for global propagation (often up to ~1 hour) or set real guild ID and restart. Re-invite with `applications.commands` scope. |
 | **`restricted method` / SQLite `System::load` warnings (JDK 24+)** | Use `start-bot.bat` / `start-bot.sh`, or add `--enable-native-access=ALL-UNNAMED` before `-jar`. Harmless if ignored today; future JDKs may require the flag. |
-| **`10062` / “The application did not respond”** | Discord allows **3 seconds** to acknowledge a slash command. RCON often takes longer. The bot now **defers** (`…is thinking…`) for `/evrima-admin`, `/evrima-mod` (whois/timeout), `/evrima-admin give`, and `/evrima link start`. If it still happens, ensure **only one** JVM/process uses this bot token. |
+| **`10062` / “The application did not respond”** | Discord allows **3 seconds** to acknowledge a slash command. RCON often takes longer. The bot **defers** (`…is thinking…`) for `/evrima-admin`, **`/evrima-server`**, `/evrima-mod` (whois/timeout), `/evrima-admin give`, and `/evrima link start`. If it still happens, ensure **only one** JVM/process uses this bot token. |
 | **Duplicate slash commands** | Usually **global + guild** both registered, or an old `/evrima` tree plus the new split roots. **Restart the latest JAR** with `discord.guild_id` set: it **clears globals first**, then registers on your guild **synchronously**. For `guild_id: 0`, it clears this bot’s commands on up to 25 guilds before registering globals. Remove leftovers in [Developer Portal](https://discord.com/developers/applications) → **Commands** if needed. |
 | **“Need admin role” but `head_admin` is set** | Listing an ID in `config.yml` does **not** grant it — your Discord account must **have that role** in the server. Run `/evrima account debug` and compare your role IDs to the config. **Restart** the bot after editing `config.yml`. |
 | **`Missing Access` or intent errors** | Server Members Intent enabled on the Bot tab. |
 | **RCON errors / timeouts** | Firewall, correct port, password, `bRconEnabled`. Bot host can reach game host (try `telnet`/`Test-NetConnection`). |
-| **“Bot is thinking…” for a long time** | Normal for RCON-heavy commands: the bot **defers** the reply (Discord’s 3s limit), then waits for **TCP connect + auth + server work** for each RCON call. Slow network, busy game server, or a high `rcon.timeout_ms` (waiting on reads) all add delay. Not a Discord “cache” issue. |
+| **“Bot is thinking…” for a long time** | The bot **defers** the reply (Discord’s 3s limit), then runs RCON. Response reads use a **fast tail** after the first bytes so you should not wait the full `rcon.timeout_ms` on every command. Remaining delay is mostly **connect + auth + game server work**; lower `rcon.timeout_ms` to fail faster on stalls. Name-based targets still need a `playerlist` fetch (cached briefly). |
 | **Kick/ban/DM odd behavior** | **`kick`** = `kick <SteamID> <reason>` (space). **`ban`** / **`dm`** = commas (`lineBan` / `lineDirectMessage`); commas inside text → **`;`**. Ban display name **`Unknown`** unless you change `BotListener`. To use **`lineKick`** (comma after SteamID), swap one line in `BotListener`. |
 | **DM link fails** | User must allow DMs from server members; user not blocking the bot. |
 | **Timeout fails** | Bot role must be **above** the target’s top role; bot has **Moderate Members**. |

@@ -7,7 +7,7 @@
 #   .\remove-evrima.ps1 -BotToken "YOUR_BOT_TOKEN"
 
 param(
-    [string] $ApplicationId = "YOUR_BOTS_APPLICATION_ID",
+    [string] $ApplicationId = "1487170136300326912",
     [Parameter(Mandatory = $true)]
     [string] $BotToken
 )
@@ -16,7 +16,7 @@ $ErrorActionPreference = "Stop"
 
 # Same format many libraries use; must not look like a full browser UA.
 $UA = "DiscordBot (https://github.com/discord/discord-api-docs, 10)"
-$evrima = @("evrima", "evrima-mod", "evrima-admin", "evrima-head")
+$evrima = @("evrima", "evrima-mod", "evrima-admin", "evrima-server", "evrima-head")
 $app = "https://discord.com/api/v10/applications/$ApplicationId"
 
 function Test-CurlAvailable {

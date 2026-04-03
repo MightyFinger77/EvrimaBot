@@ -21,6 +21,7 @@ public final class CommandRegistry {
                 publicEvrima(),
                 modEvrima(),
                 adminEvrima(),
+                serverEvrima(),
                 headEvrima()
         );
     }
@@ -134,6 +135,35 @@ public final class CommandRegistry {
                         new SubcommandData("corpse-wipe-clear", "Reset wipe fields to bundled defaults (writes config.yml)")
                                 .addOption(OptionType.STRING, "key",
                                         "enabled, interval_minutes, warn_before_minutes, announce_message, dynamic_*, or all", true)
+                );
+    }
+
+    /**
+     * Extra server controls for mapped Evrima RCON verbs that do not have dedicated
+     * /evrima-admin subcommands. Kept separate so /evrima-admin stays readable and under Discord limits.
+     */
+    private static CommandData serverEvrima() {
+        return Commands.slash("evrima-server", "Extended server RCON controls (admin/head-admin)")
+                .addSubcommands(
+                        new SubcommandData("serverdetails", "Get current server settings (RCON serverdetails)"),
+                        new SubcommandData("getplayables", "Get current playable species list (RCON getplayables)"),
+                        new SubcommandData("updateplayables", "Set playable species list (RCON updateplayables)")
+                                .addOption(OptionType.STRING, "classes", "Comma-separated class names", true),
+                        new SubcommandData("togglemigrations", "Toggle migrations (RCON togglemigrations)"),
+                        new SubcommandData("growth-toggle", "Toggle growth multiplier mode (RCON togglegrowthmultiplier)"),
+                        new SubcommandData("growth-set", "Set growth multiplier (RCON setgrowthmultiplier)")
+                                .addOption(OptionType.NUMBER, "value", "Growth multiplier value", true),
+                        new SubcommandData("netdistance-toggle",
+                                "Toggle net update distance checks (RCON togglenetupdatedistancechecks)"),
+                        new SubcommandData("pause", "Pause/unpause server simulation (RCON pause)"),
+                        new SubcommandData("queue-status", "Get queue status (RCON getqueuestatus)"),
+                        new SubcommandData("globalchat-toggle", "Toggle global chat (RCON toggleglobalchat)"),
+                        new SubcommandData("humans-toggle", "Toggle humans (RCON togglehumans)"),
+                        new SubcommandData("whitelist-toggle", "Toggle whitelist (RCON togglewhitelist)"),
+                        new SubcommandData("whitelist-add", "Add SteamID64 to whitelist (RCON addwhitelist)")
+                                .addOption(OptionType.STRING, "steam_id", "SteamID64", true),
+                        new SubcommandData("whitelist-remove", "Remove SteamID64 from whitelist (RCON removewhitelist)")
+                                .addOption(OptionType.STRING, "steam_id", "SteamID64", true)
                 );
     }
 

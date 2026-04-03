@@ -33,7 +33,8 @@ public final class EcosystemEmbeds {
             SpeciesTaxonomy taxonomy,
             Guild guild,
             boolean speciesCapControlEnabled,
-            Map<String, Integer> speciesCaps) {
+            Map<String, Integer> speciesCaps,
+            int maxPlayerSlots) {
         int total = snap.referencePlayerTotal();
 
         StringBuilder overview = new StringBuilder();
@@ -60,7 +61,11 @@ public final class EcosystemEmbeds {
         eb.setTitle(title.isBlank() ? "Ecosystem tracker" : title);
         eb.setColor(new Color(0x57F287));
         StringBuilder pop = new StringBuilder();
-        pop.append("**Players:** ").append(total).append("\n");
+        pop.append("**Players:** ").append(total);
+        if (maxPlayerSlots > 0) {
+            pop.append("/").append(maxPlayerSlots);
+        }
+        pop.append("\n");
         if (snap.declaredPlayerCount() > 0) {
             pop.append("**Declared in RCON text:** ").append(snap.declaredPlayerCount());
         }

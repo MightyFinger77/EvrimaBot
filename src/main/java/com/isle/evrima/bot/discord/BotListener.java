@@ -69,6 +69,9 @@ public final class BotListener extends ListenerAdapter {
     private final ScheduledCorpseWipeScheduler corpseWipe;
     private final AutoMessageScheduler autoMessageScheduler;
     private final SecureRandom secureRandom = new SecureRandom();
+    private static final long RESOLVE_PLAYERLIST_CACHE_MS = 3000L;
+    private volatile String resolvePlayerlistCacheRaw = "";
+    private volatile long resolvePlayerlistCacheAtMs = 0L;
 
     public BotListener(
             LiveBotConfig live,
@@ -98,6 +101,7 @@ public final class BotListener extends ListenerAdapter {
                 case "evrima" -> dispatchEvrima(event);
                 case "evrima-mod" -> dispatchEvrimaMod(event);
                 case "evrima-admin" -> dispatchEvrimaAdmin(event);
+                case "evrima-server" -> dispatchEvrimaServer(event);
                 case "evrima-head" -> dispatchEvrimaHead(event);
                 default -> { /* ignore other apps */ }
             }
@@ -132,6 +136,7 @@ public final class BotListener extends ListenerAdapter {
             `timeout` — Discord timeout (not in-game)
             
             **Admin** (`/evrima-admin`) — RCON + config writes (see Integrations → permissions): announce, playerlist, kick, ban, dm, getplayer, wipecorpses, reload, save, unlink, give, AI / species / corpse-wipe controls, …
+            **Extended RCON** (`/evrima-server`) — serverdetails, playables, migrations, growth, whitelist/global/humans toggles, queue status, pause
             
             **Head admin** (`/evrima-head check`)
             """;
@@ -192,6 +197,96 @@ public final class BotListener extends ListenerAdapter {
         }
         event.reply("Head-admin tier OK. Add future server-control commands under `/evrima-head`.")
                 .setEphemeral(true).queue();
+    }
+
+    private void dispatchEvrimaServer(SlashCommandInteractionEvent event) {
+        String sub = event.getSubcommandName();
+        if (sub == null) {
+            event.reply("Unknown subcommand.").setEphemeral(true).queue();
+            return;
+        }
+        Member member = event.getMember();
+        if (!permissions.isAtLeast(member, StaffTier.ADMIN)) {
+            event.reply(truncate(permissions.denyAdminMessage(member), 2000)).setEphemeral(true).queue();
+            return;
+        }
+        event.deferReply(true).queue(hook -> {
+            try {
+                String line;
+                String audit;
+                switch (sub) {
+                    case "serverdetails" -> {
+                        line = "serverdetails";
+                        audit = "rcon_serverdetails";
+                    }
+                    case "getplayables" -> {
+                        line = "getplayables";
+                        audit = "rcon_getplayables";
+                    }
+                    case "updateplayables" -> {
+                        String classes = requiredString(event, "classes").trim();
+                        line = "updateplayables " + classes.replace('\n', ' ');
+                        audit = "rcon_updateplayables";
+                    }
+                    case "togglemigrations" -> {
+                        line = "togglemigrations";
+                        audit = "rcon_togglemigrations";
+                    }
+                    case "growth-toggle" -> {
+                        line = "togglegrowthmultiplier";
+                        audit = "rcon_togglegrowthmultiplier";
+                    }
+                    case "growth-set" -> {
+                        line = "setgrowthmultiplier " + requiredDouble(event, "value");
+                        audit = "rcon_setgrowthmultiplier";
+                    }
+                    case "netdistance-toggle" -> {
+                        line = "togglenetupdatedistancechecks";
+                        audit = "rcon_togglenetupdatedistancechecks";
+                    }
+                    case "pause" -> {
+                        line = "pause";
+                        audit = "rcon_pause";
+                    }
+                    case "queue-status" -> {
+                        line = "getqueuestatus";
+                        audit = "rcon_getqueuestatus";
+                    }
+                    case "globalchat-toggle" -> {
+                        line = "toggleglobalchat";
+                        audit = "rcon_toggleglobalchat";
+                    }
+                    case "humans-toggle" -> {
+                        line = "togglehumans";
+                        audit = "rcon_togglehumans";
+                    }
+                    case "whitelist-toggle" -> {
+                        line = "togglewhitelist";
+                        audit = "rcon_togglewhitelist";
+                    }
+                    case "whitelist-add" -> {
+                        line = "addwhitelist " + requiredString(event, "steam_id").trim();
+                        audit = "rcon_addwhitelist";
+                    }
+                    case "whitelist-remove" -> {
+                        line = "removewhitelist " + requiredString(event, "steam_id").trim();
+                        audit = "rcon_removewhitelist";
+                    }
+                    default -> throw new IllegalStateException("Unknown server subcommand.");
+                }
+                String out = rcon.run(line);
+                database.appendAudit(event.getUser().getId(), audit, truncate(line, 300));
+                hookEditEphemeral(hook, "RCON `" + line + "`:\n```\n" + truncate(out, 1800) + "\n```");
+            } catch (SQLException e) {
+                LOG.error("evrima-server db", e);
+                hookEditEphemeral(hook, "Database error — check logs.");
+            } catch (IOException e) {
+                LOG.warn("evrima-server IO: {}", e.toString());
+                hookEditEphemeral(hook, "Operation failed: " + truncate(e.getMessage(), 1800));
+            } catch (IllegalStateException | IllegalArgumentException e) {
+                hookEditEphemeral(hook, truncate(e.getMessage(), 2000));
+            }
+        }, f -> logDeferReplyFailure("evrima-server", f));
     }
 
     private void handleLink(SlashCommandInteractionEvent event, String sub) throws SQLException {
@@ -290,6 +385,8 @@ public final class BotListener extends ListenerAdapter {
                             }
                             case "playerlist" -> {
                                 String out = rcon.run("playerlist");
+                                resolvePlayerlistCacheRaw = out == null ? "" : out;
+                                resolvePlayerlistCacheAtMs = System.currentTimeMillis();
                                 database.appendAudit(event.getUser().getId(), "rcon_playerlist", "");
                                 hookEditEphemeral(hook, "```\n" + out + "\n```");
                             }
@@ -785,7 +882,8 @@ public final class BotListener extends ListenerAdapter {
                         tax,
                         event.getGuild(),
                         ecoCfg.speciesPopulationControlEnabled(),
-                        ecoCfg.speciesPopulationCaps());
+                        ecoCfg.speciesPopulationCaps(),
+                        ecoCfg.ecosystemEmbedMaxPlayers());
                 hook.editOriginalEmbeds(embed).queue(
                         null,
                         err -> LOG.warn("ecosystem dashboard editOriginalEmbeds: {}", err.toString()));
@@ -1283,7 +1381,21 @@ public final class BotListener extends ListenerAdapter {
         if (PlayerlistPopulationParser.isSteamId64(q)) {
             return q;
         }
-        return PlayerTargetResolver.resolveToSteamOrThrow(q, rcon.run("playerlist"));
+        return PlayerTargetResolver.resolveToSteamOrThrow(q, playerlistForResolve());
+    }
+
+    /** Tiny hot-path cache for name→SteamID resolves to avoid repeated back-to-back playerlist RCON calls. */
+    private String playerlistForResolve() throws IOException {
+        long now = System.currentTimeMillis();
+        long age = now - resolvePlayerlistCacheAtMs;
+        String cached = resolvePlayerlistCacheRaw;
+        if (cached != null && !cached.isBlank() && age >= 0 && age <= RESOLVE_PLAYERLIST_CACHE_MS) {
+            return cached;
+        }
+        String fresh = rcon.run("playerlist");
+        resolvePlayerlistCacheRaw = fresh == null ? "" : fresh;
+        resolvePlayerlistCacheAtMs = now;
+        return fresh;
     }
 
     private static boolean steamIdLooksValid(String s) {

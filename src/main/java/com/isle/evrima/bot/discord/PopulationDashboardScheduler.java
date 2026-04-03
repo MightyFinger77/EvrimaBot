@@ -85,7 +85,8 @@ public final class PopulationDashboardScheduler {
                 population.taxonomy(),
                 ch.getGuild(),
                 dashCfg.speciesPopulationControlEnabled(),
-                dashCfg.speciesPopulationCaps());
+                dashCfg.speciesPopulationCaps(),
+                dashCfg.ecosystemEmbedMaxPlayers());
 
         String kvKey = KV_MESSAGE + "_" + channelId;
         long existingMsg = database.getBotKvLong(kvKey).orElse(0L);

@@ -35,6 +35,8 @@ public final class BotConfig {
     private final int dailySpinMax;
     private final String ecosystemTitle;
     private final int ecosystemCacheTtlSeconds;
+    /** Optional “/max” for ecosystem embed; {@code 0} falls back to {@link #serverStatusTopicMaxPlayers()}. */
+    private final int ecosystemMaxPlayers;
     private final long populationDashboardChannelId;
     private final int populationDashboardIntervalMinutes;
     /** Empty = disabled — text channel topics updated with the same status line (see {@link #serverStatusTopicChannelIds()}). */
@@ -128,6 +130,7 @@ public final class BotConfig {
             int dailySpinMax,
             String ecosystemTitle,
             int ecosystemCacheTtlSeconds,
+            int ecosystemMaxPlayers,
             long populationDashboardChannelId,
             int populationDashboardIntervalMinutes,
             List<Long> serverStatusTopicChannelIds,
@@ -187,6 +190,7 @@ public final class BotConfig {
         this.dailySpinMax = dailySpinMax;
         this.ecosystemTitle = ecosystemTitle;
         this.ecosystemCacheTtlSeconds = ecosystemCacheTtlSeconds;
+        this.ecosystemMaxPlayers = ecosystemMaxPlayers;
         this.populationDashboardChannelId = populationDashboardChannelId;
         this.populationDashboardIntervalMinutes = populationDashboardIntervalMinutes;
         this.serverStatusTopicChannelIds = List.copyOf(serverStatusTopicChannelIds);
@@ -318,6 +322,10 @@ public final class BotConfig {
         int ecoCache = (int) parseLong(ecosystem.get("cache_ttl_seconds"), 60L);
         if (ecoCache < 5) {
             ecoCache = 5;
+        }
+        int ecoMaxPlayers = (int) parseLong(ecosystem.get("max_players"), 0L);
+        if (ecoMaxPlayers < 0) {
+            ecoMaxPlayers = 0;
         }
 
         Map<String, Object> popDash = mapOrEmpty(root.get("population_dashboard"));
@@ -488,6 +496,7 @@ public final class BotConfig {
                 spinMax,
                 ecoTitle,
                 ecoCache,
+                ecoMaxPlayers,
                 popChannel,
                 popInterval,
                 stChannels,
@@ -848,6 +857,24 @@ public final class BotConfig {
 
     public int ecosystemCacheTtlSeconds() {
         return ecosystemCacheTtlSeconds;
+    }
+
+    /**
+     * YAML {@code ecosystem.max_players}. {@code 0} means “use {@link #serverStatusTopicMaxPlayers()} for embed /max when that is {@code > 0}.”
+     */
+    public int ecosystemMaxPlayers() {
+        return ecosystemMaxPlayers;
+    }
+
+    /**
+     * Slot cap shown as {@code Players: N/M} on the ecosystem embed. Prefers {@link #ecosystemMaxPlayers()} when set,
+     * otherwise {@link #serverStatusTopicMaxPlayers()}. {@code 0} = show {@code N} only.
+     */
+    public int ecosystemEmbedMaxPlayers() {
+        if (ecosystemMaxPlayers > 0) {
+            return ecosystemMaxPlayers;
+        }
+        return serverStatusTopicMaxPlayers;
     }
 
     public long populationDashboardChannelId() {
