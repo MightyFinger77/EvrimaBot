@@ -136,7 +136,7 @@ public final class BotListener extends ListenerAdapter {
             `timeout` — Discord timeout (not in-game)
             
             **Admin** (`/evrima-admin`) — RCON + config writes (see Integrations → permissions): announce, playerlist, kick, ban, dm, getplayer, wipecorpses, reload, save, unlink, give, AI / species / corpse-wipe controls, …
-            **Extended RCON** (`/evrima-server`) — serverdetails, playables, migrations, growth, whitelist/global/humans toggles, queue status, pause
+            **Head admin** (`/evrima-server`) — server rules RCON: serverdetails, playables, migrations, growth, whitelist/global/humans toggles, queue status, pause (same `head_admin` role list as `/evrima-head`; small servers can duplicate a role id under `head_admin` in config)
             
             **Head admin** (`/evrima-head check`)
             """;
@@ -206,8 +206,8 @@ public final class BotListener extends ListenerAdapter {
             return;
         }
         Member member = event.getMember();
-        if (!permissions.isAtLeast(member, StaffTier.ADMIN)) {
-            event.reply(truncate(permissions.denyAdminMessage(member), 2000)).setEphemeral(true).queue();
+        if (!permissions.isAtLeast(member, StaffTier.HEAD_ADMIN)) {
+            event.reply(truncate(permissions.denyHeadAdminMessage(member), 2000)).setEphemeral(true).queue();
             return;
         }
         event.deferReply(true).queue(hook -> {

@@ -6,13 +6,43 @@ import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandGroupData;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Slash commands are split across roots so server owners can hide whole trees per role in
  * Discord: Server Settings → Integrations → [this bot] → Manage (Command Permissions v2).
  */
 public final class CommandRegistry {
+
+    /**
+     * Subcommand names registered under {@code /evrima-admin}. Must stay disjoint from
+     * {@link #EVRIMA_SERVER_SUBCOMMANDS} — each RCON-facing slash lives in exactly one tree.
+     */
+    private static final Set<String> EVRIMA_ADMIN_SUBCOMMANDS = Set.of(
+            "announce", "playerlist", "kick", "ban", "dm", "getplayer", "wipecorpses", "reload", "save",
+            "unlink", "give", "ai-toggle", "ai-density", "ai-classes", "ai-stop-spawns", "ai-wipe", "ai-learning",
+            "species-control", "species-cap-set", "species-cap-clear", "species-cap-list",
+            "corpse-wipe-control", "corpse-wipe-set", "corpse-wipe-clear");
+
+    /**
+     * Subcommand names registered under {@code /evrima-server} (runtime: {@code head_admin} only).
+     * Must stay disjoint from {@link #EVRIMA_ADMIN_SUBCOMMANDS}.
+     */
+    private static final Set<String> EVRIMA_SERVER_SUBCOMMANDS = Set.of(
+            "serverdetails", "getplayables", "updateplayables", "togglemigrations", "growth-toggle", "growth-set",
+            "netdistance-toggle", "pause", "queue-status", "globalchat-toggle", "humans-toggle",
+            "whitelist-toggle", "whitelist-add", "whitelist-remove");
+
+    static {
+        var dup = new HashSet<>(EVRIMA_ADMIN_SUBCOMMANDS);
+        dup.retainAll(EVRIMA_SERVER_SUBCOMMANDS);
+        if (!dup.isEmpty()) {
+            throw new IllegalStateException(
+                    "/evrima-admin and /evrima-server must not share subcommand names: " + dup);
+        }
+    }
 
     private CommandRegistry() {}
 
@@ -139,11 +169,11 @@ public final class CommandRegistry {
     }
 
     /**
-     * Extra server controls for mapped Evrima RCON verbs that do not have dedicated
-     * /evrima-admin subcommands. Kept separate so /evrima-admin stays readable and under Discord limits.
+     * Server-rule RCON verbs that do not live under {@code /evrima-admin}. Requires {@code head_admin}
+     * at runtime. Kept separate so {@code /evrima-admin} stays readable and under Discord limits.
      */
     private static CommandData serverEvrima() {
-        return Commands.slash("evrima-server", "Extended server RCON controls (admin/head-admin)")
+        return Commands.slash("evrima-server", "Server rules RCON — head_admin only (playables, pause, whitelist, …)")
                 .addSubcommands(
                         new SubcommandData("serverdetails", "Get current server settings (RCON serverdetails)"),
                         new SubcommandData("getplayables", "Get current playable species list (RCON getplayables)"),

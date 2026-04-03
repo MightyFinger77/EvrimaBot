@@ -95,8 +95,8 @@ Open the generated URL, pick your server, authorize.
 The bot does **not** use Discord’s permission system for RCON—it uses **role IDs** you list in your config file (usually **`configs/config.yml`**):
 
 - `roles.moderator` — `/evrima-mod …`
-- `roles.admin` — `/evrima-admin …`, `/evrima-server …` (RCON), and `/evrima-admin give` for points
-- `roles.head_admin` — same as admin for `/evrima-admin` and `/evrima-server`, plus `/evrima-head …` only for this tier
+- `roles.admin` — `/evrima-admin …` (RCON + config) and `/evrima-admin give` for points
+- `roles.head_admin` — everything **admin** can do, **plus** `/evrima-server …` (playables, pause, whitelist, migrations, …) and `/evrima-head …`. *One-person server?* Put your staff role id in **both** `admin` and `head_admin` so you keep `/evrima-server` without a second Discord role.
 
 **How to get a role ID:** Discord → Server Settings → Roles → right‑click **the role** → Copy Role ID (Developer Mode on). These are **role** snowflakes, not your personal Discord user ID.
 
@@ -337,7 +337,9 @@ Resolving an in-game **name** to SteamID64 uses RCON `playerlist`; the bot **cac
 
 **Note:** `ai-wipe` does **not** run RCON — it documents the **Evrima RCON** surface. Use **`ai-stop-spawns`** / **`ai-density`** or **`ai-toggle`** for spawn / master-switch behavior.
 
-### `/evrima-server` (configure visibility + bot checks `admin` **or** `head_admin`)
+### `/evrima-server` (configure visibility + bot checks **`head_admin` only**)
+
+Subcommand names are **disjoint** from `/evrima-admin` (no slash appears in both trees; the bot fails fast at class load if that invariant breaks).
 
 Extra **mapped Evrima RCON** verbs that are not duplicated under `/evrima-admin` (keeps `/evrima-admin` under Discord’s subcommand limits and groups “server settings” in one place). Each subcommand runs the matching RCON line and shows the raw response. There is **no** `custom` / free-text RCON passthrough in this bot.
 
@@ -391,7 +393,7 @@ Extra **mapped Evrima RCON** verbs that are not duplicated under `/evrima-admin`
 - **Never commit** `config.yml` with a live token (this repo’s `.gitignore` ignores it).
 - Prefer **`DISCORD_TOKEN`** on the host over a token in a file.
 - RCON password is effectively **root on the game server**—treat like a secret.
-- Anyone with an **admin role ID** in config can run destructive RCON; keep those roles tight.
+- Anyone with an **admin role ID** in config can run moderation-heavy RCON (`kick`, `ban`, AI toggles, …). **`/evrima-server`** (playables, pause, whitelist, …) requires **`head_admin`** — keep both lists tight.
 
 ---
 
